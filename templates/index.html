@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Moka 招聘漏斗报告</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         margin: 0; padding: 24px; background: #f5f7fb; color: #1f2937; }
+  header { display: flex; justify-content: space-between; align-items: center;
+           margin-bottom: 20px; }
+  h1 { margin: 0; font-size: 22px; }
+  .meta { color: #6b7280; font-size: 13px; }
+  .actions { display: flex; gap: 8px; }
+  button, .btn {
+    padding: 8px 14px; border: 1px solid #305496; background: #305496; color: white;
+    border-radius: 6px; cursor: pointer; font-size: 13px; text-decoration: none;
+  }
+  button.secondary { background: white; color: #305496; }
+  button:hover { opacity: 0.9; }
+  table { width: 100%; border-collapse: collapse; background: white;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.06); border-radius: 8px; overflow: hidden; }
+  th, td { padding: 10px 12px; text-align: center; border-bottom: 1px solid #e5e7eb;
+           font-size: 13px; }
+  th { background: #305496; color: white; font-weight: 500; position: sticky; top: 0; }
+  td:first-child, th:first-child { text-align: left; min-width: 200px; }
+  tr:hover td { background: #f9fafb; }
+  .num-cell { font-variant-numeric: tabular-nums; }
+  .zero { color: #d1d5db; }
+  .summary { display: flex; gap: 16px; margin-bottom: 16px; }
+  .card { background: white; padding: 16px; border-radius: 8px; flex: 1;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .card .label { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
+  .card .value { font-size: 24px; font-weight: 600; color: #305496; }
+  footer { margin-top: 24px; font-size: 12px; color: #9ca3af; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Moka 招聘漏斗报告</h1>
+    <div class="meta">共 {{ job_count }} 个职位 · {{ total_applications }} 条申请 · 抓取于 {{ fetched_at }}</div>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/export.xlsx">下载 Excel</a>
+    <form method="get" action="/" style="display:inline">
+      <input type="hidden" name="force" value="1">
+      <button class="secondary" type="submit">刷新最新数据</button>
+    </form>
+  </div>
+</header>
+
+<div class="summary">
+  <div class="card">
+    <div class="label">职位数</div>
+    <div class="value">{{ job_count }}</div>
+  </div>
+  <div class="card">
+    <div class="label">总申请数</div>
+    <div class="value">{{ total_applications }}</div>
+  </div>
+  <div class="card">
+    <div class="label">已归档</div>
+    <div class="value">{{ rows | sum(attribute='archived') }}</div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>职位名称</th>
+      <th>初筛</th>
+      <th>用人部门筛选</th>
+      <th>初试</th>
+      <th>测评</th>
+      <th>复试</th>
+      <th>终试</th>
+      <th>沟通Offer</th>
+      <th>待入职</th>
+      <th>已入职</th>
+      <th>已归档</th>
+      <th>总数</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.job_title }}</td>
+      {% for stage in ['初筛','用人部门筛选','初试','测评','复试','终试','沟通Offer','待入职','已入职'] %}
+        {% set v = row.stages.get(stage, 0) %}
+        <td class="num-cell {% if v == 0 %}zero{% endif %}">{{ v }}</td>
+      {% endfor %}
+      <td class="num-cell">{{ row.archived }}</td>
+      <td class="num-cell"><strong>{{ row.total }}</strong></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<footer>
+  Moka Funnel Exporter · 数据来源:mokahr.com · {{ fetched_at }}
+</footer>
+</body>
+</html>

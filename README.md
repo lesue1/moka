@@ -2,21 +2,31 @@
 
 从 Moka 招聘系统抓每个职位的招聘漏斗数据,提供 Web 报告 + Excel 下载,供 HR 团队日常招聘复盘用。
 
-## 上手 — 双击两个文件就行
+## 上手 — 同事只要一个文件
+
+**给同事发一个 `bootstrap.bat` 就行**,双击后自动从 GitHub 下载最新版 + 装依赖 + 启动服务。
+
+```
+1. 同事收到 bootstrap.bat(微信/飞书都行)
+2. 同事双击 bootstrap.bat
+3. 自动从 GitHub 下载项目到 %USERPROFILE%\moka-funnel-exporter\
+4. 自动装 Python 依赖(约 2-5 分钟)
+5. 浏览器自动打开 http://localhost:5000
+6. 填 Moka 账号密码(Web 表单)→ 自动弹浏览器完成登录(若有验证码手动处理)
+7. 跳到漏斗报告
+```
+
+## 上手 — 开发者(手动下载)
+
+如果你想自己手动下载而不是用 bootstrap.bat:
 
 ```
 1. 浏览器打开 https://github.com/lesue1/moka
-   → 点绿色 "Code" 按钮 → "Download ZIP" → 解压到任意目录
+   → 点绿色 "Code" → "Download ZIP" → 解压到任意目录
 
 2. 双击 install.bat (一次性,装 Python 依赖 + Playwright 浏览器,约 2-5 分钟)
 
 3. 双击 start.bat (每次启动服务)
-   → 浏览器自动打开 http://localhost:5000
-   → 首次会让你填 Moka 账号密码(Web 页面填,不用碰文件)
-   → 提交后自动弹浏览器完成登录(若有验证码手动处理)
-   → 跳到漏斗报告页面
-
-4. 用完了,关闭 start.bat 的 cmd 窗口 = 关闭服务
 ```
 
 ## 前提(只装一次)
@@ -69,8 +79,9 @@ A: 删 `.env`,重新双击 start.bat → Web 表单重新填。
 
 ```
 moka-funnel-exporter/
-├─ install.bat              # 同事双击:一次性装依赖
-├─ start.bat                # 同事双击:启动服务 + 自动开浏览器
+├─ bootstrap.bat            # 同事双击:一键从 GitHub 下载 + 装依赖 + 启动(首选)
+├─ install.bat              # 手动下载后,双击一次性装依赖
+├─ start.bat                # 每次启动服务 + 自动开浏览器
 ├─ app.py                   # Flask 主入口(同事用的 Web UI)
 ├─ moka_client.py           # Moka 接口客户端 + 登录
 ├─ funnel.py                # 候选人 stageName 漏斗统计

@@ -143,6 +143,130 @@ def login_interactive() -> None:
         raise MokaError("登录超时(3 分钟),请检查是否真的登录成功")
 
 
+def save_credentials(username: str, password: str) -> None:
+    """把账号密码写到 .env(覆盖现有值)。同事在 Web 表单填完提交后调用。"""
+    env_path = BASE_DIR / ".env"
+    if not env_path.exists():
+        example = BASE_DIR / ".env.example"
+        if example.exists():
+            env_path.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
+        else:
+            env_path.write_text("", encoding="utf-8")
+
+    lines = env_path.read_text(encoding="utf-8").splitlines()
+    out: list[str] = []
+    found_user = found_pass = False
+    for line in lines:
+        if line.startswith("MOKA_USERNAME="):
+            out.append(f"MOKA_USERNAME={username}")
+            found_user = True
+        elif line.startswith("MOKA_PASSWORD="):
+            out.append(f"MOKA_PASSWORD={password}")
+            found_pass = True
+        else:
+            out.append(line)
+
+    if not found_user:
+        out.append(f"MOKA_USERNAME={username}")
+    if not found_pass:
+        out.append(f"MOKA_PASSWORD={password}")
+
+    env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    # 重新加载 .env 到 os.environ
+    load_dotenv(env_path, override=True)
+
+
+def login_with_credentials(headless: bool = False) -> None:
+    """弹 Playwright 浏览器,自动填 .env 里的 MOKA_USERNAME/MOKA_PASSWORD,等用户完成登录。
+
+    headless=False(默认):弹浏览器窗口,账号密码已自动填好,用户只需处理可能的验证码 + 点登录
+    headless=True:无头模式自动跑(适用于没有验证码的内网环境,失败 raise)
+
+    登录成功后自动保存 storage_state 到 moka_session.json。
+    """
+    from playwright.sync_api import sync_playwright
+
+    # 重新 load_dotenv 确保拿到刚 save_credentials 写的值
+    load_dotenv(BASE_DIR / ".env", override=True)
+    username = os.getenv("MOKA_USERNAME", "")
+    password = os.getenv("MOKA_PASSWORD", "")
+    if not username or not password:
+        raise MokaError("MOKA_USERNAME / MOKA_PASSWORD 未填,请先在 Web 表单提交账号密码")
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=headless)
+        context = browser.new_context(viewport={"width": 1280, "height": 800})
+        page = context.new_page()
+        page.goto(f"{MOKA_BASE}/login", wait_until="domcontentloaded", timeout=30000)
+        time.sleep(3)  # 等表单渲染
+
+        # 自动填账号(moka 登录页可能的 selector)
+        filled_user = False
+        for sel in [
+            'input[type="text"]', 'input[type="email"]',
+            'input[name*="user"]', 'input[name*="phone"]',
+            'input[name*="account"]', 'input[name*="loginName"]',
+            'input[placeholder*="账"]', 'input[placeholder*="手机"]',
+            'input[placeholder*="邮"]',
+        ]:
+            loc = page.locator(sel)
+            if loc.count() > 0:
+                loc.first.fill(username)
+                filled_user = True
+                break
+
+        # 自动填密码
+        filled_pass = False
+        for sel in ['input[type="password"]', 'input[name*="password"]']:
+            loc = page.locator(sel)
+            if loc.count() > 0:
+                loc.first.fill(password)
+                filled_pass = True
+                break
+
+        # 自动点登录
+        clicked = False
+        for sel in [
+            'button[type="submit"]',
+            'button:has-text("登录")', 'button:has-text("登 录")',
+            'form button', 'button[class*="submit"]',
+        ]:
+            loc = page.locator(sel)
+            if loc.count() > 0:
+                loc.first.click()
+                clicked = True
+                break
+
+        if not filled_user or not filled_pass:
+            browser.close()
+            raise MokaError(
+                f"moka 登录页 selector 变了(filled_user={filled_user}, filled_pass={filled_pass}),"
+                "请手动运行 python moka_client.py login"
+            )
+
+        # 等登录成功(URL 不再含 /login,或出现 moka cookie,或 DOM 出现已登录特征)
+        for i in range(180):  # 最多 3 分钟(给验证码留时间)
+            time.sleep(1)
+            url = page.url
+            cookies = context.cookies()
+            cookie_names = {c["name"] for c in cookies}
+            url_ok = "/login" not in url and "mokahr.com" in url
+            cookie_ok = bool({"USER_TOKEN", "moka_session", "_token"} & cookie_names)
+
+            if url_ok or cookie_ok:
+                time.sleep(2)
+                storage = context.storage_state()
+                _save_session(storage)
+                browser.close()
+                return
+
+            if i % 15 == 0 and i > 0:
+                print(f"[moka] 等待登录...({i}s)")
+
+        browser.close()
+        raise MokaError("登录超时(3 分钟),请重试")
+
+
 def _session_cookies() -> list[dict]:
     """从 storage_state 提取 cookies 列表(requests 用)。"""
     state = _load_session()

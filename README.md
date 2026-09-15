@@ -2,154 +2,114 @@
 
 从 Moka 招聘系统抓每个职位的招聘漏斗数据,提供 Web 报告 + Excel 下载,供 HR 团队日常招聘复盘用。
 
-## 上手(两行命令)
-
-```bash
-git clone <本仓库地址>
-cd moka-funnel-exporter && pip install -r requirements.txt && playwright install chromium
-```
-
-然后:
-
-1. 复制 `.env.example` 为 `.env`,**填入你自己的 Moka 账号密码**(不要用同事的)
-2. `python moka_client.py login` — 第一次会打开浏览器,输完账号密码自动保存登录态
-4. `python app.py` — 启动 Web 服务
-5. 浏览器打开 [http://localhost:5000](http://localhost:5000)
-
-> 完整上手教程见下方「详细步骤」。
-
-## 详细步骤
-
-### 1. 准备 Python 环境
-
-需要 Python 3.10+。建议用 venv 或 conda 创建独立环境,避免依赖冲突。
-
-```bash
-# 创建并激活虚拟环境(Windows PowerShell)
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-# 或 macOS / Linux
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-### 2. 装依赖
-
-```bash
-pip install -r requirements.txt
-playwright install chromium
-```
-
-`playwright install chromium` 会下载 Chromium 浏览器(约 150MB),首次登录要用它开浏览器窗口。
-
-### 3. 填账号
-
-```bash
-cp .env.example .env      # macOS / Linux
-copy .env.example .env    # Windows CMD
-```
-
-编辑 `.env`,把这两行的注释去掉并填入**你自己的** Moka 账号密码:
+## 上手 — 双击两个文件就行
 
 ```
-MOKA_USERNAME=你的 moka 邮箱或手机号
-MOKA_PASSWORD=你的 moka 密码
+1. 浏览器打开 https://github.com/lesue1/moka
+   → 点绿色 "Code" 按钮 → "Download ZIP" → 解压到任意目录
+
+2. 双击 install.bat (一次性,装 Python 依赖 + Playwright 浏览器,约 2-5 分钟)
+
+3. 双击 start.bat (每次启动服务)
+   → 浏览器自动打开 http://localhost:5000
+   → 首次会让你填 Moka 账号密码(Web 页面填,不用碰文件)
+   → 提交后自动弹浏览器完成登录(若有验证码手动处理)
+   → 跳到漏斗报告页面
+
+4. 用完了,关闭 start.bat 的 cmd 窗口 = 关闭服务
 ```
 
-**重要**:
-- 不要用同事的账号 — Moka 同一时间只允许一处登录,你一登同事就掉线
-- 不要把 `.env` 文件提交到 Git、传给别人、截图发群里 — 它含你的明文密码
-- 不要把你的账号密码写进代码、README、issue 任何地方
+## 前提(只装一次)
 
-### 4. 首次登录
+电脑必须**已经装了 Python 3.10+**。检查方法:打开 cmd 跑 `python --version`,能打印出版本号就 OK。
 
-```bash
-python moka_client.py login
-```
+没装的话去 https://www.python.org/downloads/ 下载,**安装时务必勾 "Add Python to PATH"**。
 
-会自动打开一个 Chromium 浏览器窗口,跳转到 Moka 登录页。**在浏览器里正常输入你的账号密码完成登录**,登录成功后程序会自动保存登录态到 `moka_session.json`(类似 cookie),下次直接用,不用再输密码。
+## 日常使用
 
-如果看不到浏览器窗口弹出,检查是否被杀毒软件拦截,或在 `moka_client.py` 里把 `headless=False` 改回 `headless=True` 之后再调试。
+启动后浏览器开 http://localhost:5000,看到漏斗报告页:
+- 顶部:刷新按钮 + 下载 Excel 按钮
+- 中部:统计概览(总职位数、总申请数)
+- 表格:每个职位 × 9 个阶段漏斗 + 总数
 
-### 5. 启动 Web 服务
+点「下载 Excel」导出当前数据为 xlsx(文件名带时间戳,不会覆盖)。
 
-```bash
-python app.py
-```
-
-启动后浏览器访问 [http://localhost:5000](http://localhost:5000),看到「招聘漏斗报告」页面就成功了。
-
-页面提供:
-- 漏斗总览表(所有职位 × 9 个阶段 + 总数)
-- 单职位详情(点击行展开)
-- 「下载 Excel」按钮 → 导出 `exports/funnel_<时间戳>.xlsx`
-
-### 6. 命令行单独导出 Excel(可选)
-
-不需要 Web 界面,只要 Excel:
-
-```bash
-python exporter.py
-```
-
-输出在 `exports/funnel_test.xlsx`。**注意:导出前请关闭 Excel 文件**,否则会报权限错误。
+session 失效时会自动弹浏览器让你重新登录(账号密码已存在 `.env`,不用重新填)。
 
 ## 常见问题
 
-**Q: 打开页面报「未登录」或「session 过期」**
-A: Moka cookie 失效了。重跑 `python moka_client.py login` 重新登录。
+**Q: 双击 install.bat 报"没检测到 Python"**
+A: 没装 Python 或 PATH 没配。去 python.org 下载,**勾 "Add Python to PATH"**。
+
+**Q: 双击 start.bat 报"没找到虚拟环境 .venv"**
+A: 没跑 install.bat 或装失败。重新双击 install.bat。
+
+**Q: 浏览器开 http://localhost:5000 后没反应**
+A: 可能 5000 端口被占。关掉 cmd 重开,或改 .env 里 FLASK_PORT=5001。
+
+**Q: 弹出的浏览器里提示"登录超时(3 分钟)"**
+A: 账号密码错了,或 moka 有验证码没处理。关浏览器,删 `.env`,重新双击 start.bat → 重新填账号。
 
 **Q: 抓到的职位数比 Moka 后台少**
-A: 删掉 `jobs_cache.json`,重跑 `python moka_client.py jobs` 强制刷新职位列表(缓存 1 小时过期)。
+A: 删 `jobs_cache.json`,然后点页面「刷新」按钮(强制刷新职位缓存)。
 
-**Q: 某个职位漏斗数据是 0**
-A: 大概率该职位当前状态不是「开放中」(Moka 只对 open 状态的职位抓数据)。
+**Q: 想换 moka 账号**
+A: 删 `.env`,重新双击 start.bat → Web 表单重新填。
 
-**Q: 想换账号怎么办**
-A: 删掉 `moka_session.json` 和 `.env`,重跑步骤 3-4。
+## 安全清单
 
-## 安全清单(发布前自查)
-
-- [ ] `.env` 文件**没**在仓库里(`git status` 不应该看到)
-- [ ] `moka_session.json` **没**在仓库里(含你的 cookie,泄露 = 别人能用你的号)
-- [ ] `jobs_cache.json` **没**在仓库里(可能含职位列表)
-- [ ] `exports/*.xlsx` **没**在仓库里(可能含候选人姓名)
+- [ ] `.env` **绝不**入库(`.gitignore` 已配) — 含你的明文密码
+- [ ] `moka_session.json` **绝不**入库 — 含你的 cookie
+- [ ] `jobs_cache.json` **绝不**入库 — 含职位列表
+- [ ] `exports/*.xlsx` **绝不**入库 — 含候选人姓名
+- [ ] `.venv/` **绝不**入库 — Python 虚拟环境
 - [ ] 没把账号密码写进任何代码、注释、issue
 
 ## 文件结构
 
 ```
 moka-funnel-exporter/
-├─ app.py              # Flask 主入口(同事用的 Web UI)
-├─ moka_client.py      # Moka 接口客户端 + 登录
-├─ funnel.py           # 候选人 stageName 漏斗统计
-├─ exporter.py         # openpyxl 写 Excel
-├─ templates/          # HTML 模板
-├─ .env.example        # 账号密码占位符(填好复制成 .env)
-├─ .gitignore          # 排除 .env / session / cache / xlsx
-├─ requirements.txt    # Python 依赖
-├─ moka_session.json   # 你的登录态(自动生成,**不入库**)
-├─ jobs_cache.json     # 职位列表缓存(自动生成,1 小时有效,**不入库**)
-└─ exports/            # 导出的 Excel(可选,本地用就行,**不入库**)
+├─ install.bat              # 同事双击:一次性装依赖
+├─ start.bat                # 同事双击:启动服务 + 自动开浏览器
+├─ app.py                   # Flask 主入口(同事用的 Web UI)
+├─ moka_client.py           # Moka 接口客户端 + 登录
+├─ funnel.py                # 候选人 stageName 漏斗统计
+├─ exporter.py              # openpyxl 写 Excel
+├─ templates/
+│  ├─ index.html            # 漏斗报告页
+│  ├─ login.html            # 首次账号密码表单
+│  ├─ login_pending.html    # 等待浏览器登录完成页
+│  └─ error.html            # 错误页
+├─ .env.example             # 账号密码占位符
+├─ .gitignore               # 排除敏感文件
+├─ requirements.txt         # Python 依赖
+├─ .venv/                   # 同事本地虚拟环境(自动生成,**不入库**)
+├─ moka_session.json        # 登录态(自动生成,**不入库**)
+├─ jobs_cache.json          # 职位缓存(自动生成,**不入库**)
+└─ exports/                 # 导出的 Excel(可选,**不入库**)
 ```
 
 ## 技术栈
 
 - **Flask 3.x** — Web 框架
-- **Playwright** — 首次登录开浏览器,后续纯 API 抓数据
+- **Playwright** — 首次登录开浏览器(自动填账号密码,用户只处理验证码)
 - **requests** — 调 Moka 后端接口
 - **openpyxl** — 写 Excel
 - **python-dotenv** — 读 `.env`
 
-## 数据流(给好奇的同事)
+## 数据流
 
 ```
-1. moka_client.py login → Playwright 打开浏览器让你输密码 → cookie 存 moka_session.json
-2. moka_client.py jobs → POST paging 接口(pageSize=200)一次拿全 94 个职位 → jobs_cache.json
-3. funnel.py → 对每个 jobId 调 search-candidate/v2 接口拿候选人 application
-4. 数每个 application.stageName 出现次数 → 9 阶段漏斗
-5. 渲染 HTML 表格(app.py)/ 写 Excel(exporter.py)
+1. start.bat 启动 → Flask 起来 → webbrowser.open_new 打开 http://localhost:5000
+2. 没 .env → 同事填账号密码(Web 表单) → save_credentials 写到 .env
+3. 有 .env 没 session → Playwright headless=False 弹浏览器
+   → 自动填账号密码 → 用户处理验证码 → 等 URL 变化 / cookie 出现
+   → 登录成功 → storage_state 存到 moka_session.json
+4. Flask 渲染 dashboard:
+   - fetch_jobs_via_browser → POST paging 接口(pageSize=200)一次拿全 94 个职位
+   - funnel_for_all_jobs → 对每个 jobId 调 search-candidate/v2 接口
+   - 数 stageName → 9 阶段漏斗
+5. 渲染 HTML 表格 / 写 Excel
 ```
 
 ## 反馈

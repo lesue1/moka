@@ -7,6 +7,7 @@ jobs_cache.json
 __pycache__/
 *.pyc
 .pytest_cache/
+.venv/
 
 # 备份 / 临时调试文件
 *.bak

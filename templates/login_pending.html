@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Moka 漏斗导出器 — 正在登录</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    margin: 0; padding: 0; min-height: 100vh;
+    background: linear-gradient(135deg, #305496 0%, #5a7bbd 100%);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    background: white; padding: 36px 40px; border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    width: 100%; max-width: 480px; text-align: center;
+  }
+  h1 { margin: 0 0 12px; font-size: 22px; color: #1f2937; }
+  .msg { color: #6b7280; font-size: 14px; margin-bottom: 20px; line-height: 1.6; }
+  .spinner {
+    width: 48px; height: 48px; margin: 0 auto 20px;
+    border: 4px solid #e5e7eb; border-top-color: #305496;
+    border-radius: 50%; animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .err {
+    background: #fee2e2; color: #991b1b; padding: 12px;
+    border-radius: 6px; font-size: 13px; margin-top: 16px; text-align: left;
+  }
+  button {
+    margin-top: 12px; padding: 10px 20px; background: #305496; color: white;
+    border: none; border-radius: 6px; cursor: pointer; font-size: 13px;
+    font-family: inherit;
+  }
+  button.secondary { background: white; color: #305496;
+                     border: 1px solid #305496; margin-top: 8px; }
+  button:hover { opacity: 0.9; }
+  .check { font-size: 48px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div id="loading">
+    <div class="spinner"></div>
+    <h1>正在打开浏览器登录</h1>
+    <p class="msg">
+      请在弹出的浏览器窗口里完成登录。<br>
+      账号密码已自动填好,你只需要:<br>
+      <strong>① 处理可能的验证码 &nbsp; ② 点击「登录」按钮</strong>
+    </p>
+  </div>
+
+  <div id="done" style="display:none">
+    <div class="check">✓</div>
+    <h1>登录成功</h1>
+    <p class="msg">即将跳转到漏斗报告页面...</p>
+  </div>
+
+  <div id="error" style="display:none">
+    <div class="check" style="color:#dc2626">⚠</div>
+    <h1>登录未完成</h1>
+    <p class="msg" id="error-msg">登录超时或失败</p>
+    <button onclick="retry()">重新打开浏览器</button>
+    <button class="secondary" onclick="resetCred()">修改账号密码</button>
+  </div>
+</div>
+
+<script>
+let pollTimer = null;
+
+async function poll() {
+  try {
+    const r = await fetch('/api/login-status');
+    const data = await r.json();
+    if (data.logged_in) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('done').style.display = 'block';
+      setTimeout(() => window.location.href = '/', 800);
+      return;
+    }
+  } catch (e) {}
+  pollTimer = setTimeout(poll, 1500);
+}
+
+async function trigger() {
+  await fetch('/login-pending');  // 后端会触发浏览器登录
+  poll();
+}
+
+async function retry() {
+  document.getElementById('error').style.display = 'none';
+  document.getElementById('loading').style.display = 'block';
+  trigger();
+}
+
+// 30 秒还没登录成功 → 显示错误
+setTimeout(() => {
+  if (!document.getElementById('done').style.display.includes('block')) {
+    // 检查是否还成功
+    fetch('/api/login-status').then(r => r.json()).then(d => {
+      if (!d.logged_in) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error').style.display = 'block';
+        if (pollTimer) clearTimeout(pollTimer);
+      }
+    });
+  }
+}, 30000);
+
+async function resetCred() {
+  // 删除 .env 让 /login 表单再次显示
+  // 后端没提供删除接口,引导同事关掉服务重新启动
+  alert('请关闭浏览器窗口和 cmd 窗口,删除项目目录下的 .env 文件,然后重新双击 start.bat');
+}
+
+trigger();
+</script>
+</body>
+</html>

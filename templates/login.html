@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Moka 漏斗导出器 — 首次登录</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    margin: 0; padding: 0; min-height: 100vh;
+    background: linear-gradient(135deg, #305496 0%, #5a7bbd 100%);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    background: white; padding: 36px 40px; border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    width: 100%; max-width: 420px;
+  }
+  h1 { margin: 0 0 8px; font-size: 22px; color: #1f2937; }
+  .sub { color: #6b7280; font-size: 13px; margin-bottom: 24px; }
+  label { display: block; margin-bottom: 6px; font-size: 13px; color: #374151; }
+  input[type="text"], input[type="password"] {
+    width: 100%; padding: 10px 12px; border: 1px solid #d1d5db;
+    border-radius: 6px; font-size: 14px; margin-bottom: 16px;
+    font-family: inherit;
+  }
+  input:focus { outline: none; border-color: #305496;
+                box-shadow: 0 0 0 3px rgba(48,84,150,0.15); }
+  button {
+    width: 100%; padding: 12px; background: #305496; color: white;
+    border: none; border-radius: 6px; cursor: pointer; font-size: 14px;
+    font-family: inherit; font-weight: 500;
+  }
+  button:hover { background: #264273; }
+  button:disabled { background: #9ca3af; cursor: not-allowed; }
+  .err {
+    background: #fee2e2; color: #991b1b; padding: 10px 12px;
+    border-radius: 6px; font-size: 13px; margin-bottom: 16px;
+  }
+  .tip {
+    background: #f0f9ff; color: #075985; padding: 10px 12px;
+    border-radius: 6px; font-size: 12px; margin-top: 16px;
+    border-left: 3px solid #0ea5e9;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Moka 漏斗导出器</h1>
+  <p class="sub">首次使用,请输入你的 Moka 账号密码</p>
+
+  {% if error %}
+  <div class="err">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST" action="/login">
+    <label for="username">账号(邮箱或手机号)</label>
+    <input type="text" id="username" name="username"
+           value="{{ username or '' }}" required autofocus
+           autocomplete="username" placeholder="example@company.com">
+
+    <label for="password">密码</label>
+    <input type="password" id="password" name="password" required
+           autocomplete="current-password" placeholder="你的 Moka 密码">
+
+    <button type="submit">下一步:打开浏览器登录</button>
+  </form>
+
+  <div class="tip">
+    提交后会自动打开浏览器,账号密码已填好,你只需处理可能的验证码即可。
+  </div>
+</div>
+</body>
+</html>

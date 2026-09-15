@@ -21,7 +21,7 @@ set "GITHUB_ZIP_URL=https://github.com/lesue1/moka/archive/refs/heads/main.zip"
 set "MARKER=%WORK_DIR%\.bootstrap_done"
 
 REM 检测是否已经 bootstrap 过(跳过下载)
-if exist "%MARKER%" goto :skip_download
+if exist "%MARKER%" goto :check_venv
 
 echo [1/4] 创建工作目录 %WORK_DIR% ...
 if not exist "%WORK_DIR%" mkdir "%WORK_DIR%"
@@ -65,7 +65,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
 REM 标记已 bootstrap(下次跳过下载)
 echo. > "%MARKER%"
 
-:skip_download
+goto :install_deps
+
+REM 已 bootstrap 过 → 检查 .venv 是否还在(.venv 还在说明依赖完整,直接启动)
+:check_venv
+if exist "%WORK_DIR%\.venv\Scripts\activate.bat" goto :start_only
+echo [提示] 已下载过但 .venv 丢失,重新装依赖 ...
+
+:install_deps
 echo.
 echo [4/4] 装依赖 ...
 echo.
@@ -82,6 +89,7 @@ if not "%INSTALL_RC%"=="0" (
     exit /b %INSTALL_RC%
 )
 
+:start_only
 echo.
 echo ============================================
 echo   启动服务

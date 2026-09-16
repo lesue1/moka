@@ -1,17 +1,17 @@
 @echo off
-setlocal
-
 REM ============================================================
 REM Moka Funnel Exporter - One-click bootstrap
-REM Assumes Python 3.10+ already installed and on PATH
+REM Uses only curl + tar (both built into Windows 10 1803+)
+REM Avoids PowerShell Invoke-WebRequest which fails silently
+REM on some Windows 10 builds with non-ASCII user paths.
 REM ============================================================
 
+setlocal
 set "WORK_DIR=%USERPROFILE%\moka-funnel-exporter"
 set "GITHUB_ZIP=https://github.com/lesue1/moka/archive/refs/heads/main.zip"
 set "MARKER=%WORK_DIR%\.bootstrap_done"
 set "LOG=%TEMP%\moka-install.log"
 
-REM Clear log on each run
 echo [%DATE% %TIME%] Bootstrap started > "%LOG%"
 
 echo.
@@ -20,79 +20,82 @@ echo   Moka Funnel Exporter - Bootstrap
 echo ============================================================
 echo.
 
-REM Force window to stay open even on early exit
-REM (Prevents the "flash and disappear" symptom)
-if not "%~1"=="NO_PAUSE" pause
+REM Verify curl is available (Windows 10 1803+)
+where curl >nul 2>nul
+if errorlevel 1 (
+    echo [FAIL] curl.exe not found. Need Windows 10 1803 or newer.
+    echo This script uses curl + tar to avoid PowerShell quirks.
+    pause
+    exit /b 1
+)
 
-echo [%DATE% %TIME%] Step 1: prepare dir >> "%LOG%"
-if not exist "%WORK_DIR%" mkdir "%WORK_DIR%"
+REM Ensure target dir exists
+if not exist "%WORK_DIR%" mkdir "%WORK_DIR%" 2>nul
 
 REM --- Step 1: download from GitHub (skip if already done) ---
 if exist "%MARKER%" goto :check_venv
 
 echo [1/3] Downloading from GitHub ...
-echo.
-echo     (If stuck here for more than 60 seconds,
-echo     your company may block GitHub.
-echo     See %LOG% for details.)
-echo.
+echo [%DATE% %TIME%] download start >> "%LOG%"
 
-REM Use a temp .ps1 file instead of inline multi-line powershell.
-REM This avoids cmd caret-line-continuation parsing issues.
-set "PS1=%TEMP%\moka-download.ps1"
-> "%PS1%" echo try {
->> "%PS1%" echo   $ProgressPreference = 'SilentlyContinue'
->> "%PS1%" echo   Invoke-WebRequest -Uri '%GITHUB_ZIP%' -OutFile '%WORK_DIR%\moka.zip' -UseBasicParsing
->> "%PS1%" echo } catch {
->> "%PS1%" echo   Write-Host ('[FAIL] ' + $_.Exception.Message)
->> "%PS1%" echo   exit 1
->> "%PS1%" echo }
-
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%"
-if errorlevel 1 goto :download_fail
-del "%PS1%" 2>nul
-
-echo.
-echo [2/3] Extracting ...
-set "PS1=%TEMP%\moka-extract.ps1"
-> "%PS1%" echo Expand-Archive -Path '%WORK_DIR%\moka.zip' -DestinationPath '%WORK_DIR%' -Force
->> "%PS1%" echo Remove-Item '%WORK_DIR%\moka.zip'
->> "%PS1%" echo $src = '%WORK_DIR%\moka-main'
->> "%PS1%" echo if (Test-Path $src) {
->> "%PS1%" echo   Get-ChildItem -Path $src -Force ^| ForEach-Object {
->> "%PS1%" echo     Move-Item -Path $_.FullName -Destination '%WORK_DIR%' -Force
->> "%PS1%" echo   }
->> "%PS1%" echo   Remove-Item $src -Recurse -Force
->> "%PS1%" echo }
-
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%"
+curl -sSL -o "%WORK_DIR%\moka.zip" "%GITHUB_ZIP%"
 if errorlevel 1 (
-    del "%PS1%" 2>nul
     echo.
-    echo [FAIL] Extract failed.
+    echo [FAIL] curl download failed (network or SSL issue).
+    echo Common causes:
+    echo   - No internet
+    echo   - Company blocks github.com
+    echo   - SSL certificate problem
+    echo.
+    echo Manual fallback:
+    echo   1. Browser: https://github.com/lesue1/moka - Code - Download ZIP
+    echo   2. Extract ZIP to: %WORK_DIR%
+    echo   3. Re-run this script
     echo Log: %LOG%
     pause
     exit /b 1
 )
-del "%PS1%" 2>nul
 
-REM Mark bootstrap done (skip download next time)
+REM Verify the download is actually a zip (not 404 HTML page)
+if not exist "%WORK_DIR%\moka.zip" (
+    echo [FAIL] Download produced no file.
+    pause
+    exit /b 1
+)
+
+REM Quick sanity check - zip files start with PK (hex 50 4B)
+for %%I in ("%WORK_DIR%\moka.zip") do set "SIZE=%%~zI"
+if "%SIZE%" LSS "1000" (
+    echo [FAIL] Downloaded file too small (%SIZE% bytes), probably an error page.
+    type "%WORK_DIR%\moka.zip" 2>nul
+    del "%WORK_DIR%\moka.zip"
+    pause
+    exit /b 1
+)
+echo [%DATE% %TIME%] download OK size=%SIZE% >> "%LOG%"
+
+echo.
+echo [2/3] Extracting ...
+tar -xf "%WORK_DIR%\moka.zip" -C "%WORK_DIR%"
+if errorlevel 1 (
+    echo [FAIL] tar extract failed.
+    del "%WORK_DIR%\moka.zip" 2>nul
+    pause
+    exit /b 1
+)
+
+REM Flatten moka-main/* into WORK_DIR
+if exist "%WORK_DIR%\moka-main" (
+    robocopy "%WORK_DIR%\moka-main" "%WORK_DIR%" /E /MOVE /NFL /NDL /NJH /NJS >nul 2>&1
+    rmdir "%WORK_DIR%\moka-main" 2>nul
+)
+
+del "%WORK_DIR%\moka.zip" 2>nul
 echo. > "%MARKER%"
 echo [OK] Downloaded and extracted.
-echo [%DATE% %TIME%] Download OK >> "%LOG%"
+echo [%DATE% %TIME%] extract OK >> "%LOG%"
 
 goto :install_deps
-
-:download_fail
-del "%PS1%" 2>nul
-echo.
-echo [FAIL] Download failed. Manual fallback:
-echo   1. Browser: https://github.com/lesue1/moka - Code - Download ZIP
-echo   2. Extract ZIP to: %WORK_DIR%
-echo   3. Re-run this script
-echo Log: %LOG%
-pause
-exit /b 1
 
 REM --- Already downloaded - check if venv exists ---
 :check_venv
@@ -101,9 +104,6 @@ if exist "%WORK_DIR%\.venv\Scripts\activate.bat" goto :start_only
 :install_deps
 echo.
 echo [3/3] Installing dependencies (2-5 minutes on first run) ...
-echo.
-echo     This will: create venv, pip install, download Chromium
-echo     See %LOG% for progress
 echo [%DATE% %TIME%] install start >> "%LOG%"
 
 pushd "%WORK_DIR%"

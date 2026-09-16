@@ -38,7 +38,7 @@ if exist "%MARKER%" goto :check_venv
 echo [1/3] Downloading from GitHub ...
 echo [%DATE% %TIME%] download start >> "%LOG%"
 
-curl -sSL -o "%WORK_DIR%\moka.zip" "%GITHUB_ZIP%"
+curl -#SLo "%WORK_DIR%\moka.zip" "%GITHUB_ZIP%"
 if errorlevel 1 (
     echo.
     echo [FAIL] curl download failed (network or SSL issue).
@@ -76,7 +76,7 @@ echo [%DATE% %TIME%] download OK size=%SIZE% >> "%LOG%"
 
 echo.
 echo [2/3] Extracting ...
-tar -xf "%WORK_DIR%\moka.zip" -C "%WORK_DIR%"
+tar -xvf "%WORK_DIR%\moka.zip" -C "%WORK_DIR%"
 if errorlevel 1 (
     echo [FAIL] tar extract failed.
     del "%WORK_DIR%\moka.zip" 2>nul
@@ -86,7 +86,7 @@ if errorlevel 1 (
 
 REM Flatten moka-main/* into WORK_DIR
 if exist "%WORK_DIR%\moka-main" (
-    robocopy "%WORK_DIR%\moka-main" "%WORK_DIR%" /E /MOVE /NFL /NDL /NJH /NJS >nul 2>&1
+    robocopy "%WORK_DIR%\moka-main" "%WORK_DIR%" /E /MOVE /NJH /NJS
     rmdir "%WORK_DIR%\moka-main" 2>nul
 )
 

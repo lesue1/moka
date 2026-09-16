@@ -4,17 +4,20 @@
 
 ## 上手 — 同事只要一个文件
 
-**给同事发一个 `bootstrap.bat` 就行**,双击后自动从 GitHub 下载最新版 + 装依赖 + 启动服务。
+**给同事发一个 `bootstrap.bat` 就行**,但同事电脑**需要右键 → 以管理员身份运行**(部分 Windows 上双击 .bat 文件关联有问题,会显示"找不到文件 .bat")。
 
 ```
 1. 同事收到 bootstrap.bat(微信/飞书都行)
-2. 同事双击 bootstrap.bat
-3. 自动从 GitHub 下载项目到 %USERPROFILE%\moka-funnel-exporter\
-4. 自动装 Python 依赖(约 2-5 分钟)
-5. 浏览器自动打开 http://localhost:5000
-6. 填 Moka 账号密码(Web 表单)→ 自动弹浏览器完成登录(若有验证码手动处理)
-7. 跳到漏斗报告
+2. 右键 bootstrap.bat → "以管理员身份运行"(重要!有些电脑双击 .bat 会失败)
+3. 如果没装 Python:脚本会自动打开 python.org 下载页,装时勾 "Add Python to PATH"
+4. 自动从 GitHub 下载项目到 %USERPROFILE%\moka-funnel-exporter\
+5. 自动装 Python 依赖(约 2-5 分钟)
+6. 浏览器自动打开 http://localhost:5000
+7. 填 Moka 账号密码(Web 表单)→ 自动弹浏览器完成登录(若有验证码手动处理)
+8. 跳到漏斗报告
 ```
+
+如果脚本失败,在 `%TEMP%\moka-install.log` 有完整日志。
 
 ## 上手 — 开发者(手动下载)
 

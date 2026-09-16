@@ -1,42 +1,45 @@
 @echo off
-chcp 65001 >nul
-setlocal
+setlocal EnableExtensions
+
+set "LOG=%TEMP%\moka-install.log"
 
 echo.
-echo ============================================
-echo   Moka 漏斗导出器 — 启动服务
-echo ============================================
+echo ============================================================
+echo   Starting Moka Funnel Exporter
+echo ============================================================
 echo.
+echo [%DATE% %TIME%] start.bat invoked >> "%LOG%"
 
-REM 检查 Python
+REM Check Python
 where python >nul 2>nul
 if errorlevel 1 (
-    echo [错误] 没检测到 Python,请先安装
+    echo [FAIL] Python not found.
+    echo Install Python 3.10+ from python.org first.
+    echo [%DATE% %TIME%] FAIL: no python in start.bat >> "%LOG%"
     pause
     exit /b 1
 )
 
-REM 检查虚拟环境
+REM Check venv
 if not exist ".venv\Scripts\activate.bat" (
-    echo [错误] 没找到虚拟环境 .venv
-    echo 请先双击 install.bat 装依赖
-    echo.
+    echo [FAIL] Virtual environment .venv not found.
+    echo Run bootstrap.bat first to install dependencies.
+    echo [%DATE% %TIME%] FAIL: no venv in start.bat >> "%LOG%"
     pause
     exit /b 1
 )
 
-REM 激活虚拟环境
+REM Activate venv
 call .venv\Scripts\activate.bat
 
-echo 启动 Web 服务 ...
-echo 浏览器会自动打开 http://localhost:5000
+echo Starting web service ...
+echo Browser will open automatically to http://localhost:5000
+echo Close this window to stop the service.
 echo.
-echo 关闭此窗口 = 关闭服务
-echo.
+echo [%DATE% %TIME%] Launching python app.py >> "%LOG%"
 
-REM 启动 Flask(app.py 内部会自动 webbrowser.open_new)
 python app.py
 
 echo.
-echo 服务已关闭
+echo [%DATE% %TIME%] Service exited >> "%LOG%"
 pause

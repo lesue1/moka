@@ -67,28 +67,43 @@ def is_logged_in() -> bool:
     return valid
 
 
+_verify_cache: tuple[bool, str, float] | None = None  # (valid, reason, ts)
+_VERIFY_TTL = 30  # 秒,防同事频繁刷新 / 前端轮询打爆 moka
+
+
 def verify_session_valid() -> tuple[bool, str]:
     """真实验证 session 是否有效 — 发一次轻量请求看 moka 响应。
 
     返回 (is_valid, reason)。比单纯检查文件存在更靠谱,避免 session 过期却误报已登录。
+    加 30 秒缓存,防止 dashboard 刷新 / /api/login-status 轮询把 moka 打爆。
     """
+    global _verify_cache
+    if _verify_cache and (time.time() - _verify_cache[2]) < _VERIFY_TTL:
+        return _verify_cache[0], _verify_cache[1]
+
     if not SESSION_FILE.exists():
-        return False, "session file not found"
-    try:
-        sess = _requests_session()
-        resp = sess.post(
-            SEARCH_URL,
-            json={"pipelineId": "40490", "limit": 1},
-            timeout=10,
-        )
-        if resp.status_code != 200:
-            return False, f"HTTP {resp.status_code}"
-        payload = resp.json()
-        if not payload.get("success"):
-            return False, payload.get("msg", "unknown error")
-        return True, ""
-    except Exception as e:
-        return False, str(e)
+        result = (False, "session file not found")
+    else:
+        try:
+            sess = _requests_session()
+            resp = sess.post(
+                SEARCH_URL,
+                json={"pipelineId": "40490", "limit": 1},
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                result = (False, f"HTTP {resp.status_code}")
+            else:
+                payload = resp.json()
+                if not payload.get("success"):
+                    result = (False, payload.get("msg", "unknown error"))
+                else:
+                    result = (True, "")
+        except Exception as e:
+            result = (False, str(e))
+
+    _verify_cache = (result[0], result[1], time.time())
+    return result
 
 
 def login_interactive() -> None:
@@ -174,6 +189,20 @@ def save_credentials(username: str, password: str) -> None:
     env_path.write_text("\n".join(out) + "\n", encoding="utf-8")
     # 重新加载 .env 到 os.environ
     load_dotenv(env_path, override=True)
+
+
+def delete_credentials() -> bool:
+    """删 .env 文件(让同事能重新填账号)。返回 True 表示真删了。"""
+    global _verify_cache
+    env_path = BASE_DIR / ".env"
+    if env_path.exists():
+        env_path.unlink()
+        # 同时清 session 和缓存,下次 verify 会重新探测
+        if SESSION_FILE.exists():
+            SESSION_FILE.unlink()
+        _verify_cache = None
+        return True
+    return False
 
 
 def login_with_credentials(headless: bool = False) -> None:

@@ -1,10 +1,10 @@
 """Flask 主入口 — 给 HR 同事用的 Web 应用
 
 同事首次使用:
-  1. 双击 start.bat → 浏览器自动打开 http://localhost:5000
-  2. 没 .env 时显示账号密码表单 → 同事填账号密码 → 提交
+  1. 双击 start.bat -> 浏览器自动打开 http://localhost:5000
+  2. 没 .env 时显示账号密码表单 -> 同事填账号密码 -> 提交
   3. 后端自动启动 Playwright 弹浏览器,账号密码已自动填好
-  4. 同事只需处理可能的验证码 + 点登录 → 自动跳到 dashboard
+  4. 同事只需处理可能的验证码 + 点登录 -> 自动跳到 dashboard
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from exporter import build_workbook
 from funnel import funnel_for_all_jobs
 from moka_client import (
     MokaError,
-    is_logged_in,
+    delete_credentials,
     load_jobs_cache,
     login_with_credentials,
     refresh_jobs_cache,
@@ -32,14 +32,15 @@ from moka_client import (
 
 app = Flask(__name__)
 
-# 简单内存缓存(防同事多次点"刷新"反复打 moka)
+# 漏斗数据内存缓存(防同事多次点刷新反复打 moka)
 _cache_lock = threading.Lock()
 _cache: dict | None = None
 _cache_ts: float = 0.0
 CACHE_TTL = 60  # 秒
 
-# 防止同事重复点"登录"按钮并发触发多个 Playwright 实例
+# Playwright 浏览器登录线程的状态 + 错误信息
 _browser_login_in_progress = False
+_browser_login_error: str | None = None  # 给前端显示用
 _browser_login_lock = threading.Lock()
 
 
@@ -55,18 +56,27 @@ def _trigger_browser_login() -> bool:
 
     返回 True 表示已触发,False 表示正在登录中(防止并发)。
     """
-    global _browser_login_in_progress
+    global _browser_login_in_progress, _browser_login_error
     with _browser_login_lock:
         if _browser_login_in_progress:
             return False
         _browser_login_in_progress = True
+        _browser_login_error = None  # 重置错误
 
     def _run():
-        global _browser_login_in_progress
+        global _browser_login_in_progress, _browser_login_error
         try:
             login_with_credentials(headless=False)
-        except Exception:
-            pass
+        except Exception as e:
+            # 之前静默吞掉 — 现在写日志 + 暴露给前端,同事能看到为啥失败
+            _browser_login_error = str(e)
+            from pathlib import Path
+            log = Path(os.getenv("TEMP", "/tmp")) / "moka-install.log"
+            try:
+                with open(log, "a", encoding="utf-8") as f:
+                    f.write(f"[{datetime.now().isoformat()}] login error: {e}\n")
+            except Exception:
+                pass
         finally:
             _browser_login_in_progress = False
 
@@ -74,11 +84,28 @@ def _trigger_browser_login() -> bool:
     return True
 
 
+def _venv_healthy() -> bool:
+    """检查 .venv 是否真的能 import flask(防半残 venv)。"""
+    from pathlib import Path
+    venv_python = Path(__file__).parent / ".venv" / "Scripts" / "python.exe"
+    if not venv_python.exists():
+        return False
+    try:
+        import subprocess
+        r = subprocess.run(
+            [str(venv_python), "-c", "import flask, requests, openpyxl, playwright"],
+            capture_output=True, timeout=10,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def _get_funnel_rows(force: bool = False) -> tuple[list[dict], list[dict]]:
     """返回 (rows, jobs)。60 秒内复用缓存。"""
     global _cache, _cache_ts
 
-    if not force and _cache and (datetime.now().timestamp() - _cache_ts) < CACHE_TTL:
+    if not force and _cache and (time.time() - _cache_ts) < CACHE_TTL:
         return _cache["rows"], _cache["jobs"]
 
     # 1. 取职位列表(优先缓存,无则现抓)
@@ -91,20 +118,17 @@ def _get_funnel_rows(force: bool = False) -> tuple[list[dict], list[dict]]:
 
     with _cache_lock:
         _cache = {"rows": rows, "jobs": jobs}
-        _cache_ts = datetime.now().timestamp()
+        _cache_ts = time.time()
     return rows, jobs
 
 
 @app.route("/")
 def index():
-    valid, reason = verify_session_valid()
-
-    # 引导未配置的同事去填表单
     if not _env_file_exists():
         return redirect("/login")
 
+    valid, reason = verify_session_valid()
     if not valid:
-        # 有 .env 但没 session → 自动触发浏览器登录,跳到等待页
         _trigger_browser_login()
         return redirect("/login-pending")
 
@@ -128,12 +152,12 @@ def index():
 def login():
     """账号密码表单(只有没 .env 时才显示)"""
     if _env_file_exists():
-        # 已填过账号但 session 失效 → 引导去弹浏览器登录
         return redirect("/login-pending")
 
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
-        password = (request.form.get("password") or "").strip()
+        # H1 修复: 密码只去 \n 不去空格 — HR 常带空格复制粘贴,会被默默截掉
+        password = (request.form.get("password") or "").rstrip("\n\r")
         if not username or not password:
             return render_template(
                 "login.html",
@@ -148,7 +172,6 @@ def login():
                 error=f"保存账号失败:{e}",
                 username=username,
             )
-        # 写完 .env 后跳到等待页(等待页自动触发浏览器登录)
         return redirect("/login-pending")
 
     return render_template("login.html", error=None, username="")
@@ -164,16 +187,30 @@ def login_pending():
     if valid:
         return redirect("/")
 
-    # 触发浏览器登录(幂等,已在跑的话不会重复启动)
     _trigger_browser_login()
     return render_template("login_pending.html")
 
 
 @app.route("/api/login-status")
 def login_status():
-    """前端轮询用,检查 session 是否有效"""
+    """前端轮询用,检查 session 是否有效 + 暴露登录错误信息(替代之前的静默吞错)"""
     valid, reason = verify_session_valid()
-    return {"logged_in": valid, "reason": reason}
+    with _browser_login_lock:
+        in_progress = _browser_login_in_progress
+        err = _browser_login_error
+    return {
+        "logged_in": valid,
+        "reason": reason,
+        "in_progress": in_progress,
+        "error": err,
+    }
+
+
+@app.route("/api/reset-env", methods=["POST"])
+def reset_env():
+    """删除 .env,让同事能重新填账号(不是改密码 — 密码是 moka 的事)"""
+    deleted = delete_credentials()
+    return {"deleted": deleted}
 
 
 @app.route("/export.xlsx")
@@ -197,25 +234,36 @@ def export_excel():
     )
 
 
-@app.route("/health")
-def health():
-    valid, reason = verify_session_valid()
-    return {
-        "status": "ok" if valid else "session_invalid",
-        "logged_in": valid,
-        "reason": reason,
-    }
-
-
 if __name__ == "__main__":
     import webbrowser
 
-    host = os.getenv("FLASK_HOST", "0.0.0.0")
+    # C1 修复: 默认只监听 127.0.0.1 (本机),同事在公司 WiFi 不会被别人访问
+    # 想让局域网同事访问才需要改 .env 里 FLASK_HOST=0.0.0.0
+    host = os.getenv("FLASK_HOST", "127.0.0.1")
     port = int(os.getenv("FLASK_PORT", "5000"))
+
+    # H6 修复: 端口占用检测,防止双击 start.bat 两次崩端口
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind((host, port))
+        s.close()
+    except OSError:
+        print(f"[FAIL] Port {port} already in use. Maybe already running?")
+        print("If a previous instance crashed, wait 30 seconds or restart your computer.")
+        import sys
+        sys.exit(1)
+
+    # H2 修复: 检查 .venv 是否真的能 import(防半残 venv)
+    if not _venv_healthy():
+        print("[FAIL] .venv is broken or missing. Run bootstrap.bat to reinstall.")
+        print("Log: %TEMP%\\moka-install.log")
+        import sys
+        sys.exit(1)
 
     # 启动后自动开浏览器(给同事的最简体验)
     def _open_browser():
-        time.sleep(1.5)  # 等 Flask 起来
+        time.sleep(1.5)
         webbrowser.open_new(f"http://localhost:{port}")
 
     threading.Thread(target=_open_browser, daemon=True).start()

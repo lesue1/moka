@@ -62,7 +62,7 @@
     <h1>登录未完成</h1>
     <p class="msg" id="error-msg">登录超时或失败</p>
     <button onclick="retry()">重新打开浏览器</button>
-    <button class="secondary" onclick="resetCred()">修改账号密码</button>
+    <button class="secondary" onclick="resetAccount()">重新填账号</button>
   </div>
 </div>
 
@@ -78,6 +78,10 @@ async function poll() {
       document.getElementById('done').style.display = 'block';
       setTimeout(() => window.location.href = '/', 800);
       return;
+    }
+    // 暴露登录错误(替代之前的静默吞错)
+    if (data.error) {
+      document.getElementById('error-msg').textContent = data.error;
     }
   } catch (e) {}
   pollTimer = setTimeout(poll, 1500);
@@ -97,7 +101,6 @@ async function retry() {
 // 30 秒还没登录成功 → 显示错误
 setTimeout(() => {
   if (!document.getElementById('done').style.display.includes('block')) {
-    // 检查是否还成功
     fetch('/api/login-status').then(r => r.json()).then(d => {
       if (!d.logged_in) {
         document.getElementById('loading').style.display = 'none';
@@ -108,10 +111,11 @@ setTimeout(() => {
   }
 }, 30000);
 
-async function resetCred() {
-  // 删除 .env 让 /login 表单再次显示
-  // 后端没提供删除接口,引导同事关掉服务重新启动
-  alert('请关闭浏览器窗口和 cmd 窗口,删除项目目录下的 .env 文件,然后重新双击 start.bat');
+async function resetAccount() {
+  // 真删 .env → 跳回 /login 表单让同事重新填账号
+  // (不是改密码 — 密码是 moka 系统自己的事,跟本工具无关)
+  await fetch('/api/reset-env', {method: 'POST'});
+  window.location.href = '/login';
 }
 
 trigger();
